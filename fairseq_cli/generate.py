@@ -210,12 +210,13 @@ def _main(cfg: DictConfig, output_file):
 
         for i, sample_id in enumerate(sample["id"].tolist()):
             has_target = sample["target"] is not None
-
             # Remove padding
             if "src_tokens" in sample["net_input"]:
                 src_tokens = utils.strip_pad(
                     sample["net_input"]["src_tokens"][i, :], tgt_dict.pad()
                 )
+            elif "img_source" in sample["net_input"]:
+                src_tokens = sample["net_input"]["img_source"]
             else:
                 src_tokens = None
 
@@ -234,10 +235,11 @@ def _main(cfg: DictConfig, output_file):
                     sample_id
                 )
             else:
-                if src_dict is not None:
-                    src_str = src_dict.string(src_tokens, cfg.common_eval.post_process)
-                else:
-                    src_str = ""
+                src_str = ""
+                # if src_dict is not None:
+                #     src_str = src_dict.string(src_tokens, cfg.common_eval.post_process)
+                # else:
+                #     src_str = ""
                 if has_target:
                     target_str = tgt_dict.string(
                         target_tokens,

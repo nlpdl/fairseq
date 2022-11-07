@@ -29,7 +29,6 @@ from .fairseq_model import (
     FairseqMultiModel,
 )
 
-
 MODEL_REGISTRY = {}
 MODEL_DATACLASS_REGISTRY = {}
 ARCH_MODEL_REGISTRY = {}

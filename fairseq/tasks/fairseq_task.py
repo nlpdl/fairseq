@@ -277,7 +277,7 @@ class FairseqTask(object):
             return self.dataset_to_epoch_iter[dataset]
 
         assert isinstance(dataset, FairseqDataset)
-
+        
         # initialize the dataset with the correct starting epoch
         dataset.set_epoch(epoch)
 
@@ -298,6 +298,8 @@ class FairseqTask(object):
             max_sentences=max_sentences,
             required_batch_size_multiple=required_batch_size_multiple,
         )
+
+        
 
         reuse_dataloader = getattr(self.cfg, "reuse_dataloader", True)
         persistent_workers = getattr(self.cfg, "persistent_workers", False)

@@ -6,7 +6,7 @@
 import math
 import sys
 from typing import Dict, List, Optional
-
+import logging
 import torch
 import torch.nn as nn
 from torch import Tensor
@@ -15,6 +15,7 @@ from fairseq import search, utils
 from fairseq.data import data_utils
 from fairseq.models import FairseqIncrementalDecoder
 from fairseq.ngram_repeat_block import NGramRepeatBlock
+logger = logging.getLogger(__name__)
 
 
 class SequenceGenerator(nn.Module):
@@ -239,6 +240,12 @@ class SequenceGenerator(nn.Module):
                 if net_input["padding_mask"] is not None
                 else torch.tensor(src_tokens.size(-1)).to(src_tokens)
             )
+        elif "img_source" in net_input:
+            src_tokens = net_input['img_source']
+            bz, channel, height, width = src_tokens.shape
+            time_step = height * width
+            src_lengths = torch.ones(bz, device=src_tokens.device) * time_step
+
         else:
             raise Exception(
                 "expected src_tokens or source in net input. input keys: "
@@ -270,6 +277,8 @@ class SequenceGenerator(nn.Module):
             self.min_len <= max_len
         ), "min_len cannot be larger than max_len, please adjust these!"
         # compute the encoder output for each beam
+        # net_input.pop('src_token')
+        # net_input.pop('src_lengths')
         with torch.autograd.profiler.record_function("EnsembleModel: forward_encoder"):
             encoder_outs = self.model.forward_encoder(net_input)
 

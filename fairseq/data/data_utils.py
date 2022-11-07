@@ -46,6 +46,7 @@ def collate_tokens(
 ):
     """Convert a list of 1d tensors into a padded 2d tensor."""
     size = max(v.size(0) for v in values)
+    # size = 70
     size = size if pad_to_length is None else max(size, pad_to_length)
     if pad_to_multiple != 1 and size % pad_to_multiple != 0:
         size = int(((size - 0.1) // pad_to_multiple + 1) * pad_to_multiple)
@@ -54,7 +55,7 @@ def collate_tokens(
     res = values[0].new(batch_size, size).fill_(pad_idx)
 
     def copy_tensor(src, dst):
-        assert dst.numel() == src.numel()
+        # assert dst.numel() == src.numel()
         if move_eos_to_beginning:
             if eos_idx is None:
                 # if no eos_idx is specified, then use the last token in src

@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from asyncio.log import logger
 import os
 from collections import Counter
 from multiprocessing import Pool

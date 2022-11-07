@@ -14,6 +14,8 @@ from fairseq.models.transformer import TransformerConfig
 from fairseq.modules import LayerNorm, MultiheadAttention
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
+from fairseq.models.image_to_net_pretrain.pretrain_config import PretrainConfig
+
 
 
 class TransformerEncoderLayerBase(nn.Module):
@@ -224,6 +226,21 @@ class TransformerEncoderLayerBase(nn.Module):
         if self.return_fc and not torch.jit.is_scripting():
             return x, fc_result
         return x
+
+
+# backward compatible with the legacy argparse format
+class TransformerPretrainEncoderLayer(TransformerEncoderLayerBase):
+    def __init__(self, args):
+        print(args)
+        super().__init__(PretrainConfig.from_namespace(args))
+        self.args = args
+
+    def build_self_attention(self, embed_dim, args):
+        return super().build_self_attention(
+            embed_dim, PretrainConfig.from_namespace(args)
+        )
+
+
 
 
 # backward compatible with the legacy argparse format
