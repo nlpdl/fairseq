@@ -79,8 +79,8 @@ class TextOnlyDataset(FairseqDataset):
 
     def size(self, index):
         src_size = self.src_sizes[index]
-        tgt_size = self.tgt_sizes[index]
-        return src_size, tgt_size
+        # tgt_size = self.tgt_sizes[index]
+        return src_size
 
     def num_tokens(self, index):
         return self.tgt_sizes[index]
@@ -130,11 +130,11 @@ class TextOnlyDataset(FairseqDataset):
         collated["net_input"]["src_lengths"] = src_lengths
         return collated
 
-    def filter_indices_by_size(self, indices, max_sizes):
+    # def filter_indices_by_size(self, indices, max_sizes):
         
-        assert len(max_sizes) == 2
-        ignored = indices[self.tgt_sizes[indices] > max_sizes[1]].tolist()
-        indices = indices[self.tgt_sizes[indices] <= max_sizes[1]]
+    #     assert len(max_sizes) == 2
+    #     ignored = indices[self.tgt_sizes[indices] > max_sizes[1]].tolist()
+    #     indices = indices[self.tgt_sizes[indices] <= max_sizes[1]]
 
-        return indices, ignored
+    #     return indices, ignored
 

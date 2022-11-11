@@ -118,7 +118,7 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
 
 
     @classmethod
-    def build_my_encoder(cls, cfg,embed_tokens=None):#不知道为什么，叫build_encoder会提示参数不够
+    def build_my_encoder(cls, cfg,embed_tokens=None):
         return TransformerEncoder(cfg,embed_tokens)
     @classmethod
     def build_contrastive_encoder(cls, cfg, src_dict, embed_tokens):
@@ -147,8 +147,8 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
         
     #     initialized_keys = []
     #     for key in state_dict:
-    #         if 'decoder.' in key:#不要decoder的参数
-    #             continue
+    #         # if 'decoder.' in key:#不要decoder的参数
+    #         #     continue
     #         temp_key = key.replace('encoder.','contrastive_encoder.')
     #         #更改指向，这里contrastive_encoder才是原版encoder，需要对比学习的地方
     #         #从头开始训练的时候才用
@@ -224,7 +224,7 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
             encoder_input, encoder_padding_mask = self.img_encoder_prenet(img_source)
         
         #图像有对比学习部分，要单独考虑
-        if self.taskname == 'img_pretrain':
+        if input_type == 'image':
             encoder_out = self.encoder(encoder_input, encoder_padding_mask)
             contrastive_encoder_out = self.contrastive_encoder(src_token, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens)
             c_out = contrastive_encoder_out['encoder_out'][0]
@@ -295,8 +295,14 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
         elif self.taskname == 'it':
             pass
         else:
-            decoder_out[1]['codebook_out'] = codebook_out
-            return decoder_out
+            if input_type == 'text':
+                decoder_out[1]['codebook_out'] = codebook_out
+                return decoder_out
+            elif input_type == 'image':
+                decoder_out[1]['contrastive_encoder_out'] = c_out
+                decoder_out[1]['encoder_out'] = e_out
+                decoder_out[1]['codebook_out'] = codebook_out
+                return decoder_out
 
 
         

@@ -25,6 +25,7 @@ from fairseq.data import (
     encoders,
     indexed_dataset,
     TextOnlyDataset,
+    MultitaskDataset,
 )
 from fairseq.data.indexed_dataset import get_available_dataset_impl
 from fairseq.dataclass import ChoiceEnum, FairseqDataclass
@@ -124,6 +125,12 @@ class TranslationConfig(FairseqDataclass):
            "help":"图片路径" 
         },
     )
+    batch_ratio: str = field(
+        default = 'None',
+        metadata={
+           "help":"batch_ratio" 
+        },
+    )
     required_seq_len_multiple: int = II("dataset.required_seq_len_multiple")
 
     # options for reporting BLEU during validation
@@ -193,6 +200,7 @@ class ImagePretrainTranslationTask(FairseqTask):
         super().__init__(cfg)
         self.src_dict = src_dict
         self.tgt_dict = tgt_dict
+        self.batch_ratio = cfg.batch_ratio
 
     @classmethod
     def setup_task(cls, cfg: TranslationConfig, **kwargs):
@@ -335,6 +343,97 @@ class ImagePretrainTranslationTask(FairseqTask):
                 source_process = source_process_text,
                 text_compression_level=text_compression_level,
             )
+        if self.cfg.train_type == 'mix_pretrain':#联合预训练
+            is_train_split = ("train" in split)
+            self.datasets[split] = RawImageDataset(#加载图像
+                manifest_path=manifest_path,
+                img_path=self.cfg.img_path,
+                src=self.cfg.source_lang,
+                split = split,
+                min_sample_size=self.cfg.min_sample_size,
+                text_compression_level=text_compression_level,
+            )
+            #加上源文本
+            source_text_path = os.path.join(data_path, f"{split}.{self.cfg.source_lang}-{self.cfg.target_lang}.{self.cfg.source_lang}")#加载源文本
+            source_text_skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
+            source_text_compressor = TextCompressor(level=text_compression_level)
+            with open(source_text_path, "r") as f:
+                source_texts = [
+                    source_text_compressor.compress(l)
+                    for i, l in enumerate(f)
+                    if i not in source_text_skipped_indices
+                ]
+
+            assert len(source_texts) == len(self.datasets[split]), (
+                f"texts length ({len(source_texts)}) and dataset length "
+                f"({len(self.datasets[split])}) do not match"
+            )
+
+
+            text_path = os.path.join(data_path, f"{split}.{self.cfg.source_lang}-{self.cfg.target_lang}.{self.cfg.target_lang}")#加载文本
+            skipped_indices = getattr(self.datasets[split], "skipped_indices", set())
+            text_compressor = TextCompressor(level=text_compression_level)
+            with open(text_path, "r") as f:
+                texts = [
+                    text_compressor.compress(l)
+                    for i, l in enumerate(f)
+                    if i not in skipped_indices
+                ]
+
+            assert len(texts) == len(self.datasets[split]), (
+                f"texts length ({len(texts)}) and dataset length "
+                f"({len(self.datasets[split])}) do not match"
+            )
+            # encode spm sentence to tensor
+            process_text = LabelEncoder(self.target_dictionary)#dict还用原本的信息生成
+
+            source_process_text = LabelEncoder(self.source_dictionary)
+            pretrain_datasets = []
+            sample_ratios = []
+            # image-text pair dataset
+            pretrain_datasets.append(Image2TextDataset(#加载图像和文档
+                self.datasets[split],
+                texts,
+                source_texts,
+                pad=self.target_dictionary.pad(),
+                eos=self.target_dictionary.eos(),
+                batch_targets=True,
+                process_label=process_text,
+                source_process = source_process_text,
+                text_compression_level=text_compression_level,
+            ))
+            sample_ratios.append(sum([pretrain_datasets[0].size(i) for i in range(len(pretrain_datasets[0]))]))
+            pretrain_datasets.append(TextOnlyDataset(#只加载文本
+                texts,
+                source_texts,
+                pad=self.target_dictionary.pad(),
+                eos=self.target_dictionary.eos(),
+                batch_targets=True,
+                process_label=process_text,
+                source_process = source_process_text,
+                text_compression_level=text_compression_level,
+            ))
+
+            sample_ratios.append(sum([pretrain_datasets[1].size(i) for i in range(len(pretrain_datasets[1]))]))
+
+            if self.batch_ratio is not 'None':
+                batch_ratio = eval(self.batch_ratio)
+                assert len(batch_ratio) == len(sample_ratios)
+                sample_ratios = [sample_ratios[i] / batch_ratio[i] for i in range(len(sample_ratios))]
+            else:
+                batch_ratio = None
+            
+            max_size = max(sample_ratios)
+            sample_ratios = [max_size / r for r in sample_ratios]
+            if is_train_split:
+                self.datasets[split] = MultitaskDataset(
+                    pretrain_datasets, sample_ratios, batch_ratio
+                )
+            else:
+                self.datasets[split] = MultitaskDataset(
+                    pretrain_datasets, batch_ratio=batch_ratio
+                )
+
 
 
 

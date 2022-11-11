@@ -255,7 +255,8 @@ class Image2TextDataset(FairseqDataset):
         self.text_compressor = TextCompressor(level=text_compression_level)
 
         self.src_sizes = self.dataset.sizes
-        self.tgt_sizes = np.array([len(self.get_label(i, process_fn=self.process_label)) for i in range(len(self.dataset))])
+        self.src_sizes = np.array([len(self.dataset.source[i].split) for i in range(len(self.dataset))])
+        self.tgt_sizes = np.array([len(self.dataset.labels[i].split) for i in range(len(self.dataset))])
 
     
     def get_label(self, index, process_fn=None):
@@ -281,7 +282,7 @@ class Image2TextDataset(FairseqDataset):
     def size(self, index):
         src_size = self.src_sizes[index]
         tgt_size = self.tgt_sizes[index]
-        return src_size, tgt_size
+        return src_size
 
     def num_tokens(self, index):
         return self.tgt_sizes[index]
@@ -329,11 +330,11 @@ class Image2TextDataset(FairseqDataset):
         collated["net_input"]["src_lengths"] = src_lengths
         return collated
 
-    def filter_indices_by_size(self, indices, max_sizes):
+    # def filter_indices_by_size(self, indices, max_sizes):
         
-        assert len(max_sizes) == 2
-        ignored = indices[self.tgt_sizes[indices] > max_sizes[1]].tolist()
-        indices = indices[self.tgt_sizes[indices] <= max_sizes[1]]
+    #     assert len(max_sizes) == 2
+    #     ignored = indices[self.tgt_sizes[indices] > max_sizes[1]].tolist()
+    #     indices = indices[self.tgt_sizes[indices] <= max_sizes[1]]
 
-        return indices, ignored
+    #     return indices, ignored
 

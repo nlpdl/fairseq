@@ -81,12 +81,26 @@ class MyCriterion(FairseqCriterion):
         """
         net_output = model(**sample["net_input"])
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
-        contrastive_encoder_out = net_output[1]['contrastive_encoder_out'].transpose(0,1)
-        encoder_out = net_output[1]['encoder_out'].transpose(0,1)
+        if 'codebook_out' in net_output[1].keys():#如果用量化
+            codebook_out = net_output[1]['codebook_out']
+            extra_losses = []
+            names = []
+            if "prob_perplexity" in codebook_out:
+                extra_losses.append(
+                    (codebook_out["num_vars"] - codebook_out["prob_perplexity"])
+                    / codebook_out["num_vars"]
+                )
+                names.append("prob_perplexity")
+                loss = loss + 0.1*extra_losses[0]
+        
+        if 'contrastive_encoder_out' in net_output[1].keys():#对比学习
+            contrastive_encoder_out = net_output[1]['contrastive_encoder_out'].transpose(0,1)
+            encoder_out = net_output[1]['encoder_out'].transpose(0,1)
 
-        contrastive_encoder_out = contrastive_encoder_out.contiguous().view(contrastive_encoder_out.size(0),-1)
-        encoder_out = encoder_out.contiguous().view(encoder_out.size(0),-1)
-        out_put = self.info_loss(encoder_out,contrastive_encoder_out)
+            contrastive_encoder_out = contrastive_encoder_out.contiguous().view(contrastive_encoder_out.size(0),-1)
+            encoder_out = encoder_out.contiguous().view(encoder_out.size(0),-1)
+            out_put = self.info_loss(encoder_out,contrastive_encoder_out)
+            loss = loss + out_put
 
         # res_x = net_output[1]['res_x']
 
@@ -99,7 +113,7 @@ class MyCriterion(FairseqCriterion):
             sample["target"].size(0) if self.sentence_avg else sample["ntokens"]
         )
         logging_output = {
-            "loss": loss.data + out_put.data,
+            "loss": loss.data,
             "nll_loss": nll_loss.data,
             "ntokens": sample["ntokens"],
             "nsentences": sample["target"].size(0),
@@ -109,7 +123,7 @@ class MyCriterion(FairseqCriterion):
             n_correct, total = self.compute_accuracy(model, net_output, sample)
             logging_output["n_correct"] = utils.item(n_correct.data)
             logging_output["total"] = utils.item(total.data)
-        return loss + out_put, sample_size, logging_output
+        return loss, sample_size, logging_output
 
     def get_lprobs_and_target(self, model, net_output, sample):
         lprobs = model.get_normalized_probs(net_output, log_probs=True)
