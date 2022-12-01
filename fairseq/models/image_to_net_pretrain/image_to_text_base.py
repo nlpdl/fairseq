@@ -10,7 +10,7 @@ import torch.nn as nn
 from torch import Tensor
 
 import logging
-
+from collections  import OrderedDict
 from fairseq import utils
 from fairseq.dataclass.utils import gen_parser_from_dataclass
 from fairseq.distributed import fsdp_wrap
@@ -21,7 +21,7 @@ from fairseq.models.image_to_net_pretrain import TransformerEncoder
 from fairseq.models.image_to_net_pretrain import TextEncoderPrenet
 from fairseq.models.image_to_net_pretrain import ImageFeatureExtraction
 from fairseq.models.image_to_net_pretrain import PretrainConfig
-
+from .vgg_model import Model
 from fairseq.modules import (
     GumbelVectorQuantizer,
 )
@@ -32,6 +32,26 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
     def __init__(self, cfg, encoder, decoder,img_encoder_prenet,text_encoder_prenet,contrastive_encoder):
         super().__init__(encoder, decoder)
         self.img_encoder_prenet = img_encoder_prenet
+        if cfg.ocr_pretrain:
+            logger.info('using pretrain ocr model')
+            model_path = '/home/sxy/Projects/cp/base_data/model_v3/checkpoint/zh_sim_g2.pth'
+            state_dict = torch.load(model_path,map_location='cpu')
+            new_state_dict = OrderedDict()
+            for key ,value in state_dict.items():
+                if "Prediction" in key:
+                    continue
+                new_key = key[7:]
+                new_state_dict[new_key] = value
+            self.img_encoder_prenet.load_state_dict(new_state_dict)
+        else:
+            for m in self.img_encoder_prenet.modules():
+                if isinstance(m,nn.Conv2d):
+                    torch.nn.init.xavier_normal_(m.weight,gain = 1)
+                elif isinstance(m,nn.BatchNorm2d):
+                    m.weight.data.fill_(1)
+                    m.bias.data.zero_()
+
+
         self.text_encoder_prenet = text_encoder_prenet
         self.contrastive_encoder = contrastive_encoder
 
@@ -114,7 +134,7 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
     
     @classmethod
     def build_img_encoder_prenet(cls,cfg):
-        return ImageFeatureExtraction(cfg.input_channel,cfg.output_channel)
+        return Model(cfg.input_channel,cfg.output_channel,cfg.output_channel)
 
 
     @classmethod
@@ -132,35 +152,6 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
             embed_tokens,
             no_encoder_attn=cfg.no_cross_attention,
         )
-    # def load_state_dict(
-    #     self,
-    #     state_dict,
-    #     strict=True,
-    #     model_cfg=None,
-    #     args=None,
-    # ):
-    #     """
-    #     纯文本预训练实验才用，预加载对比学习。
-    #     """
-        
-    #     model_state_dict = self.state_dict()
-        
-    #     initialized_keys = []
-    #     for key in state_dict:
-    #         # if 'decoder.' in key:#不要decoder的参数
-    #         #     continue
-    #         temp_key = key.replace('encoder.','contrastive_encoder.')
-    #         #更改指向，这里contrastive_encoder才是原版encoder，需要对比学习的地方
-    #         #从头开始训练的时候才用
-    #         if temp_key in model_state_dict:  
-    #             # 对应参数位置进行替换
-    #             model_state_dict[temp_key] = state_dict[key].to(model_state_dict[temp_key].device)
-    #             initialized_keys.append(key)
-    #     logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
-    #     logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
-            
-    #     return super().load_state_dict(model_state_dict, strict, model_cfg, args)
-    
     def load_state_dict(
         self,
         state_dict,
@@ -169,24 +160,53 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
         args=None,
     ):
         """
-        Copies parameters and buffers from *state_dict* into this module and
-        its descendants.
-
-        Overrides the method in :class:`nn.Module`. Compared with that method
-        this additionally "upgrades" *state_dicts* from old checkpoints.
+        纯文本预训练实验才用，预加载对比学习。
         """
         
         model_state_dict = self.state_dict()
         
         initialized_keys = []
         for key in state_dict:
-            if key in model_state_dict:  
-                model_state_dict[key] = state_dict[key].to(model_state_dict[key].device)
+            # if 'decoder.' in key:#不要decoder的参数
+            #     continue
+            temp_key = key.replace('encoder.','contrastive_encoder.')
+            #更改指向，这里contrastive_encoder才是原版encoder，需要对比学习的地方
+            #从头开始训练的时候才用
+            if temp_key in model_state_dict:  
+                # 对应参数位置进行替换
+                model_state_dict[temp_key] = state_dict[key].to(model_state_dict[temp_key].device)
                 initialized_keys.append(key)
         logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
         logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
             
         return super().load_state_dict(model_state_dict, strict, model_cfg, args)
+    
+    # def load_state_dict(
+    #     self,
+    #     state_dict,
+    #     strict=True,
+    #     model_cfg=None,
+    #     args=None,
+    # ):
+    #     """
+    #     Copies parameters and buffers from *state_dict* into this module and
+    #     its descendants.
+
+    #     Overrides the method in :class:`nn.Module`. Compared with that method
+    #     this additionally "upgrades" *state_dicts* from old checkpoints.
+    #     """
+        
+    #     model_state_dict = self.state_dict()
+        
+    #     initialized_keys = []
+    #     for key in state_dict:
+    #         if key in model_state_dict:  
+    #             model_state_dict[key] = state_dict[key].to(model_state_dict[key].device)
+    #             initialized_keys.append(key)
+    #     logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
+    #     logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
+            
+    #     return super().load_state_dict(model_state_dict, strict, model_cfg, args)
 
 
     # TorchScript doesn't support optional arguments with variable length (**kwargs).
@@ -209,6 +229,9 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
         which are not supported by TorchScript.
         """
 
+        # print(img_source.shape)
+        # assert 1 == 0
+
         codebook_out = {}
         #先判定输入性质
         input_type = 'text'#默认text
@@ -222,7 +245,7 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
             encoder_input, encoder_padding_mask = self.text_encoder_prenet(src_token)
         else:
             encoder_input, encoder_padding_mask = self.img_encoder_prenet(img_source)
-        
+
         #图像有对比学习部分，要单独考虑
         if input_type == 'image':
             encoder_out = self.encoder(encoder_input, encoder_padding_mask)
@@ -231,7 +254,7 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
             e_out = encoder_out['encoder_out'][0]
 
             e_out = e_out.transpose(0,2)
-            e_out = nn.Linear(e_out.size(-1),c_out.size(0)).cuda()(e_out)
+            e_out = nn.Linear(e_out.size(-1),c_out.size(0)).cuda().half()(e_out)
             e_out = e_out.transpose(0,2)
         else:
             encoder_out = self.encoder(encoder_input, encoder_padding_mask)

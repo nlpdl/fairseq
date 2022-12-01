@@ -17,10 +17,11 @@ import math
 from fairseq.data import FairseqDataset,data_utils
 from fairseq.data.image_utils import (
     parse_path,
+    compute_ratio_and_resize
 )
 from fairseq.data.text_compressor import TextCompressor, TextCompressionLevel
 import cv2
-
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,7 @@ def contrast_grey(img):
     low  = np.percentile(img, 10)
     return (high-low)/np.maximum(10, high+low), high, low
 
-def adjust_contrast_grey(img, target = 0.4):
+def adjust_contrast_grey(img, target = 0.0):
     contrast, high, low = contrast_grey(img)
     if contrast < target:
         img = img.astype(int)
@@ -66,16 +67,19 @@ class RawImageDataset(FairseqDataset):
         img_path,
         src,
         split,
+        adjust_contrast=0.0,
         min_sample_size=0,
         shuffle=True,
         text_compression_level=TextCompressionLevel.none,
     ):
         super().__init__()
+        self.adjust_contrast = adjust_contrast
         self.shuffle = shuffle
         self.text_compressor = TextCompressor(level=text_compression_level)
         skipped = 0
         self.fnames = []#图片
         self.split = split
+        self.model_height = 64
         # self.white_fnames = []#白背景
         # self.mask_fnames = []#去噪背景
         sizes = []
@@ -89,14 +93,14 @@ class RawImageDataset(FairseqDataset):
             for i, line in enumerate(f):
                 # items = line.strip()#分为图像地址与图像大小，图像大小统一640**480
                 # items = '{}_img/'.format(split) + line.strip().split('\t')[0]
-                items = line.strip().split('\t')[0]
+                # items = line.strip().split('\t')[0]
                 # assert len(items) == 2, line
                 # sz = int(items[1])
                 # if min_sample_size is not None and sz < min_sample_size:
                 #     skipped += 1
                 #     self.skipped_indices.add(i)
                 #     continue
-                self.fnames.append(self.text_compressor.compress(items))
+                self.fnames.append(self.text_compressor.compress(line.replace('\n','')))
                 # sizes.append(sz)
         # logger.info(f"loaded {len(self.fnames)}, skipped {skipped} samples")
 
@@ -140,14 +144,29 @@ class RawImageDataset(FairseqDataset):
         resized_image = img.resize((resized_w, 32), Image.BICUBIC)
         feats = self.transform(resized_image)
         return feats
-    def padding_feat(self,img):
+    def padding_feat(self,img,path):
         s_h,s_w = 680,480
         h, w, n = img.shape
         if w > 480:
             img = cv2.resize(img, (480, int(h*(float(480)/float(w)))))
             h, w, n = img.shape
-        img_modify = cv2.copyMakeBorder(img, 0, s_h - h, 0, s_w - w, cv2.BORDER_CONSTANT, value=[0,0,0,0])
+        try:
+            img_modify = cv2.copyMakeBorder(img, 0, s_h - h, 0, s_w - w, cv2.BORDER_CONSTANT, value=[0,0,0,0])
+        except:
+            print(path)
+            traceback.print_exc()
+        
         return img_modify
+    
+    def remove_invisible_chars(self,s):
+        """移除所有不可见字符，除\n外"""
+        str = ''
+        for x in s:
+            if x is not '\n' and not x.isprintable():
+                str += ''
+            else:
+                str += x
+        return str
 
 
     def __getitem__(self, index):
@@ -161,9 +180,13 @@ class RawImageDataset(FairseqDataset):
         # path_or_fp = os.path.join(self.root_dir+'/img_crop', fn)
         # print(path_or_fp)
         _path = parse_path(path_or_fp)
-        img = cv2.imread(_path)
-        img = self.padding_feat(img)
-        feats = torch.from_numpy(img).float()
+        img = cv2.imread(_path, flags=0)
+        img, ratio = self.preprocess(img)
+        # _path = "/home/sxy/Projects/cp/test/imgset/20221113132715.png"
+        # img = cv2.imread(self.remove_invisible_chars(_path))
+        # img = self.padding_feat(img,_path)
+        # logger.info(_path)
+        # feats = torch.from_numpy(img).float()
         # feats = self.feat(_path)
 
 
@@ -195,10 +218,17 @@ class RawImageDataset(FairseqDataset):
         # feats_mask = self.postprocess(feats_mask)
 
         # return {"id": index, "img_source": feats,"img_white_source":feats_white,'img_mask_source':feats_mask}
-        return {"id": index, "img_source": feats}
+        return {"id": index, "img_source": img}
 
     def __len__(self):
         return len(self.fnames)
+    
+    def preprocess(self, img_grey):
+        # preprocess for recognizer
+        #img, img_grey = reformat_input(img) # obtain grey image
+        height, width = img_grey.shape
+        resized_img, ratio = compute_ratio_and_resize(img_grey,width,height,self.model_height) # fix height as model_height
+        return Image.fromarray(resized_img, 'L'), ratio
 
     # def size(self, index):
     #     return self.sizes[index]
@@ -210,18 +240,38 @@ class RawImageDataset(FairseqDataset):
         samples = [s for s in samples if s["img_source"] is not None]
         if len(samples) == 0:
             return {}
-        sources = torch.stack([s["img_source"] for s in samples]) # (B,C,H,W)
+
+
+        # obtain maximum height and width, then pad
+        max_width = max([sample["img_source"].size[0] for sample in samples])
+        input_channel = 1
+        transform = NormalizePAD((input_channel, self.model_height, max_width))
+        transformed_images = []
+        for sample in samples:
+            image = sample["img_source"]
+            w, h = image.size
+            #### augmentation here - change contrast
+            if self.adjust_contrast > 0:
+                image = np.array(image.convert("L")) # 256 grey
+                image = adjust_contrast_grey(image)
+                image = Image.fromarray(image, 'L')
+
+            transformed_images.append(transform(image))
+
+        image_tensors = torch.cat([t.unsqueeze(0) for t in transformed_images], 0) # (B,C,H,W)
+        input = {"img_source": image_tensors} 
+        # sources = torch.stack([s["img_source"] for s in samples]) # (B,C,H,W)
 
         # sources_white = torch.stack([s["img_white_source"] for s in samples]) # (B,C,H,W)
         # img_mask_source = torch.stack([s["img_mask_source"] for s in samples]) # (B,C,H,W)
-        input = {"img_source": sources}
+        # input = {"img_source": sources}
         out = {"id": torch.LongTensor([s["id"] for s in samples])}
         
         out["net_input"] = input
         return out
-    def preprocess(self, img):
-        # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        return img
+    # def preprocess(self, img):
+    #     # img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    #     return img
     def postprocess(self, feats):
         # todo image postprocess
         return feats
@@ -255,8 +305,8 @@ class Image2TextDataset(FairseqDataset):
         self.text_compressor = TextCompressor(level=text_compression_level)
 
         self.src_sizes = self.dataset.sizes
-        self.src_sizes = np.array([len(self.dataset.source[i].split) for i in range(len(self.dataset))])
-        self.tgt_sizes = np.array([len(self.dataset.labels[i].split) for i in range(len(self.dataset))])
+        self.src_sizes = np.array([len(self.get_source(i, process_fn=self.process_label)) for i in range(len(self.source))])
+        self.tgt_sizes = np.array([len(self.get_label(i, process_fn=self.process_label)) for i in range(len(self.labels))])
 
     
     def get_label(self, index, process_fn=None):

@@ -25,27 +25,27 @@
 
 
 # x=test
-fairseq-generate /home/sxy/Projects/cp/base_data/en-zh/contrastive \
---path /home/sxy/Projects/cp/checkpoints/duibi_model/checkpoint_best.pt \
---task image_translation \
---img-path /home/sxy/Projects/cp/base_data/img_data/ \
---arch contrastive \
---batch-size 8 \
---gen-subset  "test1" \
---bpe  "sentencepiece"  --sentencepiece-model  "/home/sxy/Projects/cp/base_data/en-zh/english.model" \
---scoring "sacrebleu" \
---skip-invalid-size-inputs-valid-test \
---beam 5 > /home/sxy/Projects/cp/base_data/en-zh/contrastive/temp3.txt \
-
-
 # fairseq-generate /home/sxy/Projects/cp/base_data/en-zh/contrastive \
-# --path /home/sxy/Projects/cp/checkpoints/itnet/checkpoint_6_80000.pt \
+# --path /home/sxy/Projects/cp/checkpoints/duibi_model/checkpoint_best.pt \
 # --task image_translation \
 # --img-path /home/sxy/Projects/cp/base_data/img_data/ \
-# --arch itransformer \
+# --arch contrastive \
 # --batch-size 8 \
-# --gen-subset  "test" \
+# --gen-subset  "test1" \
 # --bpe  "sentencepiece"  --sentencepiece-model  "/home/sxy/Projects/cp/base_data/en-zh/english.model" \
 # --scoring "sacrebleu" \
 # --skip-invalid-size-inputs-valid-test \
-# --beam 5 > /home/sxy/Projects/cp/checkpoints/itnet/temp.txt \
+# --beam 5 > /home/sxy/Projects/cp/base_data/en-zh/contrastive/temp3.txt \
+
+
+fairseq-generate /home/sxy/Projects/cp/base_data/en-zh/contrastive \
+--path /home/sxy/Projects/cp/checkpoints/itnet/checkpoint_6_80000.pt \
+--task image_translation \
+--img-path /home/sxy/Projects/cp/test/imgset/ \
+--arch itransformer \
+--batch-size 2 \
+--gen-subset  "teststand" \
+--bpe  "sentencepiece"  --sentencepiece-model  "/home/sxy/Projects/cp/base_data/en-zh/english.model" \
+--scoring "sacrebleu" \
+--skip-invalid-size-inputs-valid-test \
+--beam 5 > /home/sxy/Projects/cp/checkpoints/itnet/temp.txt \

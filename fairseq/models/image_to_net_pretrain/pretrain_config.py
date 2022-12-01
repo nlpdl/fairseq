@@ -197,7 +197,7 @@ class PretrainConfig(FairseqDataclass):
     )
 
     latent_vars:int = field(
-        default=100,
+        default=128,
         metadata={"help":"latent_vars"}
     )
 
@@ -253,6 +253,13 @@ class PretrainConfig(FairseqDataclass):
         },
     )
 
+    
+    ocr_pretrain: bool = field(
+        default=False,
+        metadata={
+            "help":"if use ocr_pretrain"
+        },
+    )
     codebook_prob: float = field(
         default = 0.1,
         metadata={
