@@ -94,8 +94,8 @@ class MyCriterion(FairseqCriterion):
                 loss = loss + 0.1*extra_losses[0]
         
         if 'contrastive_encoder_out' in net_output[1].keys():#对比学习
-            contrastive_encoder_out = net_output[1]['contrastive_encoder_out'].transpose(0,1)
-            encoder_out = net_output[1]['encoder_out'].transpose(0,1)
+            contrastive_encoder_out = net_output[1]['contrastive_encoder_out']
+            encoder_out = net_output[1]['encoder_out']
 
             contrastive_encoder_out = contrastive_encoder_out.contiguous().view(contrastive_encoder_out.size(0),-1)
             encoder_out = encoder_out.contiguous().view(encoder_out.size(0),-1)

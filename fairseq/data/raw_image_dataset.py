@@ -180,7 +180,7 @@ class RawImageDataset(FairseqDataset):
         # path_or_fp = os.path.join(self.root_dir+'/img_crop', fn)
         # print(path_or_fp)
         _path = parse_path(path_or_fp)
-        img = cv2.imread(_path, flags=0)
+        img = cv2.imread(self.remove_invisible_chars(_path), flags=0)
         img, ratio = self.preprocess(img)
         # _path = "/home/sxy/Projects/cp/test/imgset/20221113132715.png"
         # img = cv2.imread(self.remove_invisible_chars(_path))

@@ -21,7 +21,7 @@ from fairseq.models.image_to_net_pretrain import TransformerEncoder
 from fairseq.models.image_to_net_pretrain import TextEncoderPrenet
 from fairseq.models.image_to_net_pretrain import ImageFeatureExtraction
 from fairseq.models.image_to_net_pretrain import PretrainConfig
-from .vgg_model import Model
+from .vgg_model import Model,CnnEncoderBase
 from fairseq.modules import (
     GumbelVectorQuantizer,
 )
@@ -54,6 +54,7 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
 
         self.text_encoder_prenet = text_encoder_prenet
         self.contrastive_encoder = contrastive_encoder
+        self.if_meanpool = cfg.if_meanpool
 
         self.cfg = cfg
         self.supports_align_args = True
@@ -134,7 +135,10 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
     
     @classmethod
     def build_img_encoder_prenet(cls,cfg):
-        return Model(cfg.input_channel,cfg.output_channel,cfg.output_channel)
+        if cfg.img_pre == 'resnet101':
+            return CnnEncoderBase(cfg.encoder_embed_dim)
+        else:
+            return Model(cfg.input_channel,cfg.output_channel,cfg.output_channel)
 
 
     @classmethod
@@ -152,35 +156,6 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
             embed_tokens,
             no_encoder_attn=cfg.no_cross_attention,
         )
-    def load_state_dict(
-        self,
-        state_dict,
-        strict=True,
-        model_cfg=None,
-        args=None,
-    ):
-        """
-        纯文本预训练实验才用，预加载对比学习。
-        """
-        
-        model_state_dict = self.state_dict()
-        
-        initialized_keys = []
-        for key in state_dict:
-            # if 'decoder.' in key:#不要decoder的参数
-            #     continue
-            temp_key = key.replace('encoder.','contrastive_encoder.')
-            #更改指向，这里contrastive_encoder才是原版encoder，需要对比学习的地方
-            #从头开始训练的时候才用
-            if temp_key in model_state_dict:  
-                # 对应参数位置进行替换
-                model_state_dict[temp_key] = state_dict[key].to(model_state_dict[temp_key].device)
-                initialized_keys.append(key)
-        logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
-        logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
-            
-        return super().load_state_dict(model_state_dict, strict, model_cfg, args)
-    
     # def load_state_dict(
     #     self,
     #     state_dict,
@@ -189,24 +164,53 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
     #     args=None,
     # ):
     #     """
-    #     Copies parameters and buffers from *state_dict* into this module and
-    #     its descendants.
-
-    #     Overrides the method in :class:`nn.Module`. Compared with that method
-    #     this additionally "upgrades" *state_dicts* from old checkpoints.
+    #     纯文本预训练实验才用，预加载对比学习。
     #     """
         
     #     model_state_dict = self.state_dict()
         
     #     initialized_keys = []
     #     for key in state_dict:
-    #         if key in model_state_dict:  
-    #             model_state_dict[key] = state_dict[key].to(model_state_dict[key].device)
+    #         # if 'decoder.' in key:#不要decoder的参数
+    #         #     continue
+    #         temp_key = key.replace('encoder.','contrastive_encoder.')
+    #         #更改指向，这里contrastive_encoder才是原版encoder，需要对比学习的地方
+    #         #从头开始训练的时候才用
+    #         if temp_key in model_state_dict:  
+    #             # 对应参数位置进行替换
+    #             model_state_dict[temp_key] = state_dict[key].to(model_state_dict[temp_key].device)
     #             initialized_keys.append(key)
     #     logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
     #     logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
             
     #     return super().load_state_dict(model_state_dict, strict, model_cfg, args)
+    
+    def load_state_dict(
+        self,
+        state_dict,
+        strict=True,
+        model_cfg=None,
+        args=None,
+    ):
+        """
+        Copies parameters and buffers from *state_dict* into this module and
+        its descendants.
+
+        Overrides the method in :class:`nn.Module`. Compared with that method
+        this additionally "upgrades" *state_dicts* from old checkpoints.
+        """
+        
+        model_state_dict = self.state_dict()
+        
+        initialized_keys = []
+        for key in state_dict:
+            if key in model_state_dict:  
+                model_state_dict[key] = state_dict[key].to(model_state_dict[key].device)
+                initialized_keys.append(key)
+        logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
+        logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
+            
+        return super().load_state_dict(model_state_dict, strict, model_cfg, args)
 
 
     # TorchScript doesn't support optional arguments with variable length (**kwargs).
@@ -248,14 +252,20 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
 
         #图像有对比学习部分，要单独考虑
         if input_type == 'image':
-            encoder_out = self.encoder(encoder_input, encoder_padding_mask)
-            contrastive_encoder_out = self.contrastive_encoder(src_token, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens)
-            c_out = contrastive_encoder_out['encoder_out'][0]
-            e_out = encoder_out['encoder_out'][0]
+            if self.if_meanpool:
+                encoder_out = self.encoder(encoder_input, encoder_padding_mask)
+                contrastive_encoder_out = self.contrastive_encoder(src_token, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens)
+                c_out = torch.mean(contrastive_encoder_out['encoder_out'][0].transpose(0,1),dim=[1,2])
+                e_out = torch.mean(encoder_out['encoder_out'][0].transpose(0,1),dim=[1,2])
+            else:
+                encoder_out = self.encoder(encoder_input, encoder_padding_mask)
+                contrastive_encoder_out = self.contrastive_encoder(src_token, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens)
+                c_out = contrastive_encoder_out['encoder_out'][0].transpose(0,1)
+                e_out = encoder_out['encoder_out'][0]
 
-            e_out = e_out.transpose(0,2)
-            e_out = nn.Linear(e_out.size(-1),c_out.size(0)).cuda().half()(e_out)
-            e_out = e_out.transpose(0,2)
+                e_out = e_out.transpose(0,2)
+                e_out = nn.Linear(e_out.size(-1),c_out.size(0)).cuda().half()(e_out)
+                e_out = e_out.transpose(0,2).transpose(0,1)
         else:
             encoder_out = self.encoder(encoder_input, encoder_padding_mask)
         

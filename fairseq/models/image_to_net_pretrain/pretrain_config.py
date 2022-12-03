@@ -260,6 +260,20 @@ class PretrainConfig(FairseqDataclass):
             "help":"if use ocr_pretrain"
         },
     )
+
+    img_pre: str = field(
+        default='oct_init',
+        metadata={
+            "help":"select img_pre"
+        },
+    )
+
+    if_meanpool: bool = field(
+        default=False,
+        metadata={
+            "help":"if_meanpool"
+        },
+    )
     codebook_prob: float = field(
         default = 0.1,
         metadata={

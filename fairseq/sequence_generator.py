@@ -289,9 +289,9 @@ class SequenceGenerator(nn.Module):
             # encoder_outs = self.model.forward_encoder({'encoder_in':encoder_input,'encoder_padding_mask':encoder_padding_mask})
 
 
-            # encoder_input, encoder_padding_mask = self.model.single_model.img_encoder_prenet(net_input['img_source'])
-            # encoder_outs = self.model.forward_encoder({'encoder_in':encoder_input,'encoder_padding_mask':encoder_padding_mask})
-            encoder_outs = self.model.forward_encoder(net_input)
+            encoder_input, encoder_padding_mask = self.model.single_model.img_encoder_prenet(net_input['img_source'])
+            encoder_outs = self.model.forward_encoder({'encoder_in':encoder_input,'encoder_padding_mask':encoder_padding_mask})
+            # encoder_outs = self.model.forward_encoder(net_input)
 
         # placeholder of indices for bsz * beam_size to hold tokens and accumulative scores
         new_order = torch.arange(bsz).view(-1, 1).repeat(1, beam_size).view(-1)
