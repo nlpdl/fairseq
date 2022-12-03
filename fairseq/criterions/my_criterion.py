@@ -2,7 +2,7 @@
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
+import logging
 import math
 from dataclasses import dataclass, field
 from info_nce import InfoNCE
@@ -12,7 +12,7 @@ from omegaconf import II
 from fairseq import metrics, utils
 from fairseq.criterions import FairseqCriterion, register_criterion
 from fairseq.dataclass import FairseqDataclass
-
+logger = logging.getLogger(__name__)
 
 @dataclass
 class MyCriterionConfig(FairseqDataclass):
@@ -96,6 +96,7 @@ class MyCriterion(FairseqCriterion):
         if 'contrastive_encoder_out' in net_output[1].keys():#对比学习
             contrastive_encoder_out = net_output[1]['contrastive_encoder_out']
             encoder_out = net_output[1]['encoder_out']
+            
 
             contrastive_encoder_out = contrastive_encoder_out.contiguous().view(contrastive_encoder_out.size(0),-1)
             encoder_out = encoder_out.contiguous().view(encoder_out.size(0),-1)

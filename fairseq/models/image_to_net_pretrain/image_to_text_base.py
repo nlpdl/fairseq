@@ -260,12 +260,13 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
             else:
                 encoder_out = self.encoder(encoder_input, encoder_padding_mask)
                 contrastive_encoder_out = self.contrastive_encoder(src_token, src_lengths=src_lengths, return_all_hiddens=return_all_hiddens)
-                c_out = contrastive_encoder_out['encoder_out'][0].transpose(0,1)
+                c_out = contrastive_encoder_out['encoder_out'][0]
                 e_out = encoder_out['encoder_out'][0]
 
                 e_out = e_out.transpose(0,2)
                 e_out = nn.Linear(e_out.size(-1),c_out.size(0)).cuda().half()(e_out)
                 e_out = e_out.transpose(0,2).transpose(0,1)
+                c_out = c_out.transpose(0,1)
         else:
             encoder_out = self.encoder(encoder_input, encoder_padding_mask)
         

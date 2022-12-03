@@ -2,6 +2,9 @@ import torch.nn as nn
 from .img_module import VGG_FeatureExtractor, BidirectionalLSTM
 import torch
 from fairseq.models import FairseqEncoder
+from fairseq.modules import (
+    LayerNorm,
+)
 class Model(nn.Module):
 
     def __init__(self, input_channel, output_channel, hidden_size, num_class = None):
@@ -134,6 +137,7 @@ class CnnEncoderBase(nn.Module):
         # self.avgpool = nn.AvgPool2d(1, stride=1)
         self.avgpool = nn.AvgPool2d(2, stride=2)
         self.linear = nn.Linear(2048,self.embed_dim)
+        self.layer_norm = LayerNorm(256)
 
         # self.grid_embedding = PositionEmbeddingSine(cfg.decoder.embed_dim // 2, normalize=True)
         # self.embed_positions = (
@@ -230,6 +234,7 @@ class CnnEncoderBase(nn.Module):
         x = x.view(bz, channel, time_step).permute(0,2,1).contiguous()
 
         x = self.linear(x)
+        x = self.layer_norm(x)
         
         src_lengths = torch.ones(bz, device=x.device) * time_step
         padding_mask = torch.zeros((bz, time_step), device=x.device)
