@@ -119,7 +119,7 @@ class CnnEncoderBase(nn.Module):
     """
 
     def __init__(self, embed_dim, layers = [3, 4, 23, 3]):
-        super(CnnEncoderBase,self).__init__()
+        super().__init__()
         self.embed_dim = embed_dim
         self.register_buffer("version", torch.Tensor([3]))
         self.inplanes = 64

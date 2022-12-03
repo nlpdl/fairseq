@@ -156,35 +156,6 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
             embed_tokens,
             no_encoder_attn=cfg.no_cross_attention,
         )
-    # def load_state_dict(
-    #     self,
-    #     state_dict,
-    #     strict=True,
-    #     model_cfg=None,
-    #     args=None,
-    # ):
-    #     """
-    #     纯文本预训练实验才用，预加载对比学习。
-    #     """
-        
-    #     model_state_dict = self.state_dict()
-        
-    #     initialized_keys = []
-    #     for key in state_dict:
-    #         # if 'decoder.' in key:#不要decoder的参数
-    #         #     continue
-    #         temp_key = key.replace('encoder.','contrastive_encoder.')
-    #         #更改指向，这里contrastive_encoder才是原版encoder，需要对比学习的地方
-    #         #从头开始训练的时候才用
-    #         if temp_key in model_state_dict:  
-    #             # 对应参数位置进行替换
-    #             model_state_dict[temp_key] = state_dict[key].to(model_state_dict[temp_key].device)
-    #             initialized_keys.append(key)
-    #     logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
-    #     logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
-            
-    #     return super().load_state_dict(model_state_dict, strict, model_cfg, args)
-    
     def load_state_dict(
         self,
         state_dict,
@@ -193,24 +164,53 @@ class ImageToNetPretrainModelBase(FairseqEncoderDecoderModel):
         args=None,
     ):
         """
-        Copies parameters and buffers from *state_dict* into this module and
-        its descendants.
-
-        Overrides the method in :class:`nn.Module`. Compared with that method
-        this additionally "upgrades" *state_dicts* from old checkpoints.
+        纯文本预训练实验才用，预加载对比学习。
         """
         
         model_state_dict = self.state_dict()
         
         initialized_keys = []
         for key in state_dict:
-            if key in model_state_dict:  
-                model_state_dict[key] = state_dict[key].to(model_state_dict[key].device)
+            # if 'decoder.' in key:#不要decoder的参数
+            #     continue
+            temp_key = key.replace('encoder.','contrastive_encoder.')
+            #更改指向，这里contrastive_encoder才是原版encoder，需要对比学习的地方
+            #从头开始训练的时候才用
+            if temp_key in model_state_dict:  
+                # 对应参数位置进行替换
+                model_state_dict[temp_key] = state_dict[key].to(model_state_dict[temp_key].device)
                 initialized_keys.append(key)
         logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
         logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
             
         return super().load_state_dict(model_state_dict, strict, model_cfg, args)
+    
+    # def load_state_dict(
+    #     self,
+    #     state_dict,
+    #     strict=True,
+    #     model_cfg=None,
+    #     args=None,
+    # ):
+    #     """
+    #     Copies parameters and buffers from *state_dict* into this module and
+    #     its descendants.
+
+    #     Overrides the method in :class:`nn.Module`. Compared with that method
+    #     this additionally "upgrades" *state_dicts* from old checkpoints.
+    #     """
+        
+    #     model_state_dict = self.state_dict()
+        
+    #     initialized_keys = []
+    #     for key in state_dict:
+    #         if key in model_state_dict:  
+    #             model_state_dict[key] = state_dict[key].to(model_state_dict[key].device)
+    #             initialized_keys.append(key)
+    #     logger.info(f"Keys initialized with pretrained model: {initialized_keys}")
+    #     logger.info(f"coverage percent: {len(initialized_keys) / len(model_state_dict)}")  
+            
+    #     return super().load_state_dict(model_state_dict, strict, model_cfg, args)
 
 
     # TorchScript doesn't support optional arguments with variable length (**kwargs).
