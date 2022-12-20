@@ -288,9 +288,11 @@ class SequenceGenerator(nn.Module):
             # encoder_input, encoder_padding_mask = self.model.single_model.text_encoder_prenet(net_input['src_token'])
             # encoder_outs = self.model.forward_encoder({'encoder_in':encoder_input,'encoder_padding_mask':encoder_padding_mask})
 
-
+            
             encoder_input, encoder_padding_mask = self.model.single_model.img_encoder_prenet(net_input['img_source'])
             encoder_outs = self.model.forward_encoder({'encoder_in':encoder_input,'encoder_padding_mask':encoder_padding_mask})
+            # logger.info('encoder')
+            # logger.info(encoder_outs[0]['encoder_out'][0].shape)
             # encoder_outs = self.model.forward_encoder(net_input)
 
         # placeholder of indices for bsz * beam_size to hold tokens and accumulative scores
@@ -377,6 +379,10 @@ class SequenceGenerator(nn.Module):
                     incremental_states,
                     self.temperature,
                 )
+
+                # logger.info('attn')
+                # logger.info(avg_attn_scores.shape)
+                # assert 1 == 0
 
             if self.lm_model is not None:
                 lm_out = self.lm_model(tokens[:, : step + 1])

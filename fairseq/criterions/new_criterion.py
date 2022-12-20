@@ -52,7 +52,7 @@ def label_smoothed_nll_loss(lprobs, target, epsilon, ignore_index=None, reduce=T
 
 
 @register_criterion(
-    "my_criterion", dataclass=MyCriterionConfig
+    "new_criterion", dataclass=MyCriterionConfig
 )
 class MyCriterion(FairseqCriterion):
     def __init__(
@@ -80,29 +80,34 @@ class MyCriterion(FairseqCriterion):
         3) logging outputs to display while training
         """
         net_output = model(**sample["net_input"])
+        auxiliary_mt_output = model.forward_mt(**sample["net_input"])
         loss, nll_loss = self.compute_loss(model, net_output, sample, reduce=reduce)
-        if 'codebook_out' in net_output[1].keys():#如果用量化
-            codebook_out = net_output[1]['codebook_out']
-            extra_losses = []
-            names = []
-            if "prob_perplexity" in codebook_out:
-                extra_losses.append(
-                    (codebook_out["num_vars"] - codebook_out["prob_perplexity"])
-                    / codebook_out["num_vars"]
-                )
-                names.append("prob_perplexity")
-                loss = loss + 0.1*extra_losses[0]
+
+        auxiliary_mt_loss, auxiliary_mt_nll_loss = self.compute_loss(model, auxiliary_mt_output, sample, reduce=reduce)
+
+        loss = auxiliary_mt_loss + loss
         
-        if 'contrastive_encoder_out' in net_output[1].keys():#对比学习
+        if 'contrastive_encoder_out' in net_output[1].keys():#encoder对比学习
             contrastive_encoder_out = net_output[1]['contrastive_encoder_out']
             encoder_out = net_output[1]['encoder_out']
-            assert 1 == 0
-            
-
             contrastive_encoder_out = contrastive_encoder_out.contiguous().view(contrastive_encoder_out.size(0),-1)
             encoder_out = encoder_out.contiguous().view(encoder_out.size(0),-1)
             out_put = self.info_loss(encoder_out,contrastive_encoder_out)
-            loss = loss + out_put
+
+            contrastive_decoder_out = net_output[1]['contrastive_decoder_out']
+            decoder_out = net_output[0].contiguous().view(net_output[0].size(0),-1)
+            contrastive_decoder_out = contrastive_decoder_out.contiguous().view(contrastive_decoder_out.size(0),-1)
+            decoder_loss = self.info_loss(decoder_out,contrastive_decoder_out)
+
+
+            loss = loss + out_put + decoder_loss
+        
+        text_representation = auxiliary_mt_output[1]['encoder_out'].contiguous().view(auxiliary_mt_output[1]['encoder_out'].size(0),-1)
+        text_contrastive_representation = auxiliary_mt_output[1]['contrastive_encoder_out'].contiguous().view(auxiliary_mt_output[1]['contrastive_encoder_out'].size(0),-1)
+
+        text_contrastive_loss = self.info_loss(text_contrastive_representation,text_representation)
+        loss = loss + text_contrastive_loss
+        # assert 1 == 0 
 
         # res_x = net_output[1]['res_x']
 

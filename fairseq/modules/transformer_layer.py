@@ -14,7 +14,7 @@ from fairseq.models.transformer import TransformerConfig
 from fairseq.modules import LayerNorm, MultiheadAttention
 from fairseq.modules.fairseq_dropout import FairseqDropout
 from fairseq.modules.quant_noise import quant_noise
-from fairseq.models.image_to_net_pretrain.pretrain_config import PretrainConfig
+from fairseq.models.image_to_net_new.pretrain_config import PretrainConfig
 
 
 

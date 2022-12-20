@@ -69,12 +69,16 @@ class RawImageDataset(FairseqDataset):
         split,
         adjust_contrast=0.0,
         min_sample_size=0,
+        imgH=64, 
+        imgW=600,
         shuffle=True,
         text_compression_level=TextCompressionLevel.none,
     ):
         super().__init__()
         self.adjust_contrast = adjust_contrast
         self.shuffle = shuffle
+        self.imgH = imgH
+        self.imgW = imgW
         self.text_compressor = TextCompressor(level=text_compression_level)
         skipped = 0
         self.fnames = []#图片
@@ -245,7 +249,7 @@ class RawImageDataset(FairseqDataset):
         # obtain maximum height and width, then pad
         max_width = max([sample["img_source"].size[0] for sample in samples])
         input_channel = 1
-        transform = NormalizePAD((input_channel, self.model_height, max_width))
+        transform = NormalizePAD((input_channel, self.imgH, self.imgW))
         transformed_images = []
         for sample in samples:
             image = sample["img_source"]
@@ -256,7 +260,14 @@ class RawImageDataset(FairseqDataset):
                 image = adjust_contrast_grey(image)
                 image = Image.fromarray(image, 'L')
 
-            transformed_images.append(transform(image))
+            
+            ratio = w / float(h)
+            if math.ceil(self.imgH * ratio) > self.imgW:
+                resized_w = self.imgW
+            else:
+                resized_w = math.ceil(self.imgH * ratio)
+            resized_image = image.resize((resized_w, self.imgH), Image.BICUBIC)
+            transformed_images.append(transform(resized_image))
 
         image_tensors = torch.cat([t.unsqueeze(0) for t in transformed_images], 0) # (B,C,H,W)
         input = {"img_source": image_tensors} 
